@@ -69,7 +69,7 @@ local timerLabel = Instance.new("TextLabel", main)
 timerLabel.Size = UDim2.new(0, 40, 0, 15)
 timerLabel.Position = UDim2.new(1, -45, 1, -20)
 timerLabel.BackgroundTransparency = 1
-timerLabel.Text = "30s"
+timerLabel.Text = "50s"
 timerLabel.TextColor3 = Color3.fromRGB(255,140,0)
 timerLabel.Font = Enum.Font.Arcade
 timerLabel.TextScaled = true
@@ -113,7 +113,7 @@ end
 
 --// Toggle
 local collecting = false
-local collectingTime = 30 -- 30 seconds of collecting
+local collectingTime = 50 -- 50 seconds of collecting (CHANGED FROM 30 TO 50)
 local surfaceTime = 2 -- 2 seconds at surface
 
 -- Function to teleport to surface
@@ -135,8 +135,7 @@ local function teleportToZone(zoneName)
 	local zone = fishZones:FindFirstChild(zoneName)
 	if not zone then 
 		statusLabel.Text = zoneName .. " not found!"
-		return false
-	end
+		return false end
 	
 	-- Find the actual part (could be the zone itself or a child part)
 	local zonePart = zone:IsA("BasePart") and zone or zone:FindFirstChildWhichIsA("BasePart")
@@ -174,14 +173,14 @@ local function stickToFish(fish, duration)
 	local part = fish:FindFirstChildWhichIsA("BasePart", true)
 	if not part then return end
 	
-	-- Calculate stick position (with whale offset if needed)
-	local offset = Vector3.new(0, 3, 0) -- Default 3 studs above
+	-- Calculate stick position (no offset for regular fish, +2 for whale)
+	local offset = Vector3.new(0, 0, 0) -- NO OFFSET for regular fish
 	
 	if fish.Name == "Whale" then
-		offset = Vector3.new(0, 2, 0) -- Exactly 2 studs higher for Whale
+		offset = Vector3.new(0, 2, 0) -- +2 studs for Whale
 		statusLabel.Text = "Sticking to Whale (+2 studs)"
 	else
-		statusLabel.Text = "Sticking to " .. fish.Name
+		statusLabel.Text = "Sticking to " .. fish.Name .. " (no offset)"
 	end
 	
 	local startTime = tick()
@@ -201,8 +200,8 @@ local function stickToFish(fish, duration)
 		-- Teleport to maintain stick (every 0.1 seconds for smooth sticking)
 		root.CFrame = CFrame.new(stickPos)
 		
-		-- Try to collect every 0.3 seconds while sticking
-		if tick() - lastPromptTime > 0.3 then
+		-- SPAM proximity prompts every 0.1 seconds while sticking
+		if tick() - lastPromptTime > 0.1 then
 			for _, obj in ipairs(fish:GetDescendants()) do
 				if obj:IsA("ProximityPrompt") then
 					fireproximityprompt(obj)
@@ -223,14 +222,14 @@ task.spawn(function()
 			-- STEP 1: Teleport to DeepOcean part
 			statusLabel.Text = "Phase 1: DeepOcean"
 			teleportToZone("DeepOcean")
-			task.wait(1) -- Wait 1 second
+			task.wait(0.2) -- CHANGED FROM 0.1 TO 0.2 SECONDS
 			
 			-- STEP 2: Teleport to TheDeepDark part
 			statusLabel.Text = "Phase 2: TheDeepDark"
 			teleportToZone("TheDeepDark")
-			task.wait(0.1) -- Wait 0.1 seconds
+			task.wait(0.2) -- CHANGED FROM 0.1 TO 0.2 SECONDS
 			
-			-- STEP 3: Start 30-second collection cycle
+			-- STEP 3: Start 50-second collection cycle
 			local cycleStart = tick()
 			local surfaceReturnTime = cycleStart + collectingTime
 			
@@ -256,9 +255,9 @@ task.spawn(function()
 								local stickDuration = 2.5 + (math.random() * 0.5) -- 2.5-3 seconds
 								stickToFish(fish, stickDuration)
 								
-								-- Brief pause before next fish (0.2 seconds)
+								-- Brief pause before next fish (0.1 seconds)
 								if collecting and tick() < surfaceReturnTime then
-									task.wait(0.2)
+									task.wait(0.1)
 								end
 								break
 							end
@@ -266,7 +265,7 @@ task.spawn(function()
 					end
 				else
 					statusLabel.Text = "No fish found"
-					task.wait(0.5)
+					task.wait(0.1) -- Wait 0.1 seconds
 				end
 			end
 			
@@ -281,13 +280,13 @@ task.spawn(function()
 				while collecting and tick() - surfaceStart < surfaceTime do
 					local timeLeft = surfaceTime - (tick() - surfaceStart)
 					timerLabel.Text = math.ceil(timeLeft) .. "s"
-					task.wait(0.1)
+					task.wait(0.1) -- Update timer every 0.1 seconds
 				end
 			end
 		else
 			statusLabel.Text = "Idle"
-			timerLabel.Text = "30s"
-			task.wait(0.5)
+			timerLabel.Text = "50s" -- CHANGED FROM 30s TO 50s
+			task.wait(0.1) -- Idle wait 0.1 seconds
 		end
 	end
 end)
@@ -323,6 +322,8 @@ end)
 task.wait(1)
 print("=== FISH COLLECTOR WITH STICKING MECHANISM ===")
 print("Target Fish: Shrimp, Slickhead, Anglerfish, Blobfish, Gulper Eel, Hammerhead, Megalodon, Whale")
-print("Whale Offset: +2 studs")
+print("Offset: NO OFFSET for regular fish, +2 studs for Whale")
+print("Proximity Spam: Every 0.1 seconds")
 print("Stick Duration: 2.5-3 seconds per fish")
-print("Sequence: DeepOcean (1s) → TheDeepDark (0.1s) → 30s Collection (sticking mode) → Surface (2s)")
+print("Collection Time: 50 seconds")
+print("Zone Teleport Waits: 0.2 seconds each")
