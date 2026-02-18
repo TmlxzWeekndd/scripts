@@ -2,6 +2,8 @@
 local Players = game:GetService("Players")
 local lp = Players.LocalPlayer
 local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 --// UI
 local gui = Instance.new("ScreenGui", lp:WaitForChild("PlayerGui"))
@@ -9,8 +11,8 @@ gui.ResetOnSpawn = false
 gui.DisplayOrder = 100
 
 local main = Instance.new("Frame", gui)
-main.Size = UDim2.new(0, 165, 0, 90)
-main.Position = UDim2.new(0.5, -82, 0.4, -45)
+main.Size = UDim2.new(0, 185, 0, 120)
+main.Position = UDim2.new(0.5, -92, 0.4, -60)
 main.BackgroundColor3 = Color3.fromRGB(0,0,0)
 main.BorderSizePixel = 0
 main.Active = true
@@ -23,7 +25,7 @@ stroke.Thickness = 2
 
 --// Collect Button
 local collectBtn = Instance.new("TextButton", main)
-collectBtn.Size = UDim2.new(1, -10, 0, 35)
+collectBtn.Size = UDim2.new(1, -10, 0, 30)
 collectBtn.Position = UDim2.new(0, 5, 0, 5)
 collectBtn.BackgroundColor3 = Color3.fromRGB(15,15,15)
 collectBtn.Text = "Collect : OFF"
@@ -37,21 +39,47 @@ local txtStroke1 = Instance.new("UIStroke", collectBtn)
 txtStroke1.Color = Color3.new(0,0,0)
 txtStroke1.Thickness = 2
 
---// Teleport Button
-local tpBtn = Instance.new("TextButton", main)
-tpBtn.Size = UDim2.new(1, -10, 0, 35)
-tpBtn.Position = UDim2.new(0, 5, 0, 45)
-tpBtn.BackgroundColor3 = Color3.fromRGB(15,15,15)
-tpBtn.Text = "Teleport Back Up"
-tpBtn.TextColor3 = Color3.fromRGB(255,140,0)
-tpBtn.Font = Enum.Font.Arcade
-tpBtn.TextScaled = true
-tpBtn.BorderSizePixel = 0
-Instance.new("UICorner", tpBtn).CornerRadius = UDim.new(0,8)
+--// Dropdown Button
+local dropdownBtn = Instance.new("TextButton", main)
+dropdownBtn.Size = UDim2.new(1, -10, 0, 30)
+dropdownBtn.Position = UDim2.new(0, 5, 0, 40)
+dropdownBtn.BackgroundColor3 = Color3.fromRGB(15,15,15)
+dropdownBtn.Text = "Select Fish ▼"
+dropdownBtn.TextColor3 = Color3.fromRGB(255,140,0)
+dropdownBtn.Font = Enum.Font.Arcade
+dropdownBtn.TextScaled = true
+dropdownBtn.BorderSizePixel = 0
+Instance.new("UICorner", dropdownBtn).CornerRadius = UDim.new(0,8)
 
-local txtStroke2 = Instance.new("UIStroke", tpBtn)
+local txtStroke2 = Instance.new("UIStroke", dropdownBtn)
 txtStroke2.Color = Color3.new(0,0,0)
 txtStroke2.Thickness = 2
+
+--// Dropdown Frame
+local dropdownFrame = Instance.new("Frame", main)
+dropdownFrame.Size = UDim2.new(1, -10, 0, 120)
+dropdownFrame.Position = UDim2.new(0, 5, 0, 72)
+dropdownFrame.BackgroundColor3 = Color3.fromRGB(15,15,15)
+dropdownFrame.BackgroundTransparency = 0.1
+dropdownFrame.BorderSizePixel = 0
+dropdownFrame.Visible = false
+dropdownFrame.ZIndex = 20
+Instance.new("UICorner", dropdownFrame).CornerRadius = UDim.new(0,8)
+
+local dropdownStroke = Instance.new("UIStroke", dropdownFrame)
+dropdownStroke.Color = Color3.fromRGB(255,140,0)
+dropdownStroke.Thickness = 1
+
+--// Scrolling Frame for fish list
+local scrollingFrame = Instance.new("ScrollingFrame", dropdownFrame)
+scrollingFrame.Size = UDim2.new(1, -10, 1, -10)
+scrollingFrame.Position = UDim2.new(0, 5, 0, 5)
+scrollingFrame.BackgroundTransparency = 1
+scrollingFrame.BorderSizePixel = 0
+scrollingFrame.ScrollBarThickness = 5
+scrollingFrame.ScrollBarImageColor3 = Color3.fromRGB(255,140,0)
+scrollingFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+scrollingFrame.AutomaticCanvasSize = Enum.AutomaticSize.Y
 
 --// Status Label
 local statusLabel = Instance.new("TextLabel", main)
@@ -92,29 +120,146 @@ end
 --// Fish Setup
 local fishesFolder = workspace:WaitForChild("Game"):WaitForChild("Fishes")
 local fishZones = workspace:WaitForChild("Game"):WaitForChild("FishZones")
+local fishModelsFolder = ReplicatedStorage:FindFirstChild("Assets") and ReplicatedStorage.Assets:FindFirstChild("FishModels")
 
--- Priority fish order (Jellyfish and Narwhal removed)
-local fishPriority = {
-	"Shrimp",
-	"Slickhead", 
-	"Anglerfish",
-	"Blobfish",
-	"Gulper Eel",
-	"Hammerhead",
-	"Megalodon",
-	"Whale"
-}
+--// Variables
+local collecting = false
+local collectingTime = 50
+local surfaceTime = 2
+local selectedFishes = {} -- Table to store selected fish names
+local allFishNames = {} -- All fish names from the folder
 
--- Convert to lookup table
-local targetNames = {}
-for _, name in ipairs(fishPriority) do
-	targetNames[name] = true
+--// Load all fish names from ReplicatedStorage.Assets.FishModels
+local function loadFishNames()
+	local names = {}
+	
+	-- Check if the folder exists
+	if fishModelsFolder then
+		for _, fish in ipairs(fishModelsFolder:GetChildren()) do
+			-- Only get models
+			if fish:IsA("Model") then
+				table.insert(names, fish.Name)
+			end
+		end
+	else
+		warn("FishModels folder not found in ReplicatedStorage.Assets!")
+		-- Fallback to workspace.Game.Fishes if needed
+		for _, fish in ipairs(fishesFolder:GetChildren()) do
+			if fish:IsA("Model") then
+				table.insert(names, fish.Name)
+			end
+		end
+	end
+	
+	-- Remove duplicates just in case
+	local seen = {}
+	local unique = {}
+	for _, name in ipairs(names) do
+		if not seen[name] then
+			seen[name] = true
+			table.insert(unique, name)
+		end
+	end
+	
+	table.sort(unique)
+	return unique
 end
 
---// Toggle
-local collecting = false
-local collectingTime = 50 -- 50 seconds of collecting (CHANGED FROM 30 TO 50)
-local surfaceTime = 2 -- 2 seconds at surface
+--// Get all fish names
+allFishNames = loadFishNames()
+
+--// Create fish selection buttons
+local function createFishButtons()
+	-- Clear existing buttons
+	for _, child in ipairs(scrollingFrame:GetChildren()) do
+		if child:IsA("TextButton") then
+			child:Destroy()
+		end
+	end
+	
+	local yPos = 0
+	for _, fishName in ipairs(allFishNames) do
+		local fishBtn = Instance.new("TextButton")
+		fishBtn.Size = UDim2.new(1, -10, 0, 20)
+		fishBtn.Position = UDim2.new(0, 5, 0, yPos)
+		fishBtn.BackgroundColor3 = Color3.fromRGB(25,25,25)
+		fishBtn.Text = fishName
+		fishBtn.TextColor3 = Color3.fromRGB(200,200,200)
+		fishBtn.Font = Enum.Font.Arcade
+		fishBtn.TextScaled = true
+		fishBtn.BorderSizePixel = 0
+		fishBtn.Parent = scrollingFrame
+		fishBtn.ZIndex = 21
+		Instance.new("UICorner", fishBtn).CornerRadius = UDim.new(0,4)
+		
+		-- Check if this fish is already selected
+		if selectedFishes[fishName] then
+			fishBtn.BackgroundColor3 = Color3.fromRGB(255,140,0)
+			fishBtn.TextColor3 = Color3.fromRGB(0,0,0)
+		end
+		
+		-- Toggle selection on click
+		fishBtn.MouseButton1Click:Connect(function()
+			if selectedFishes[fishName] then
+				selectedFishes[fishName] = nil
+				fishBtn.BackgroundColor3 = Color3.fromRGB(25,25,25)
+				fishBtn.TextColor3 = Color3.fromRGB(200,200,200)
+			else
+				selectedFishes[fishName] = true
+				fishBtn.BackgroundColor3 = Color3.fromRGB(255,140,0)
+				fishBtn.TextColor3 = Color3.fromRGB(0,0,0)
+			end
+			
+			-- Update dropdown button text
+			local count = 0
+			for _ in pairs(selectedFishes) do
+				count = count + 1
+			end
+			
+			if count == 0 then
+				dropdownBtn.Text = "Select Fish ▼"
+			elseif count == 1 then
+				local name = next(selectedFishes)
+				dropdownBtn.Text = name .. " ▼"
+			else
+				dropdownBtn.Text = count .. " fishes selected ▼"
+			end
+		end)
+		
+		yPos = yPos + 22
+	end
+	
+	scrollingFrame.CanvasSize = UDim2.new(0, 0, 0, yPos + 5)
+end
+
+--// Initialize fish buttons
+createFishButtons()
+
+--// Dropdown toggle
+dropdownBtn.MouseButton1Click:Connect(function()
+	dropdownFrame.Visible = not dropdownFrame.Visible
+end)
+
+--// Close dropdown when clicking outside
+UserInputService.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 then
+		local pos = UserInputService:GetMouseLocation()
+		local absPos = dropdownFrame.AbsolutePosition
+		local absSize = dropdownFrame.AbsoluteSize
+		
+		if dropdownFrame.Visible then
+			if pos.X < absPos.X or pos.X > absPos.X + absSize.X or
+			   pos.Y < absPos.Y or pos.Y > absPos.Y + absSize.Y then
+				local btnPos = dropdownBtn.AbsolutePosition
+				local btnSize = dropdownBtn.AbsoluteSize
+				if pos.X < btnPos.X or pos.X > btnPos.X + btnSize.X or
+				   pos.Y < btnPos.Y or pos.Y > btnPos.Y + btnSize.Y then
+					dropdownFrame.Visible = false
+				end
+			end
+		end
+	end
+end)
 
 -- Function to teleport to surface
 local function teleportToSurface()
@@ -131,13 +276,12 @@ local function teleportToZone(zoneName)
 	local root = char:FindFirstChild("HumanoidRootPart")
 	if not root then return false end
 	
-	-- Get the zone part directly by path
 	local zone = fishZones:FindFirstChild(zoneName)
 	if not zone then 
 		statusLabel.Text = zoneName .. " not found!"
-		return false end
+		return false
+	end
 	
-	-- Find the actual part (could be the zone itself or a child part)
 	local zonePart = zone:IsA("BasePart") and zone or zone:FindFirstChildWhichIsA("BasePart")
 	if not zonePart then 
 		statusLabel.Text = "No part in " .. zoneName
@@ -145,15 +289,15 @@ local function teleportToZone(zoneName)
 	end
 	
 	statusLabel.Text = "Teleporting to " .. zoneName
-	root.CFrame = zonePart.CFrame + Vector3.new(0, 5, 0) -- Slightly above zone
+	root.CFrame = zonePart.CFrame + Vector3.new(0, 5, 0)
 	return true
 end
 
--- Function to get all available target fish
+-- Function to get all available target fish (only selected ones)
 local function getAvailableFish()
 	local available = {}
 	for _, fish in ipairs(fishesFolder:GetChildren()) do
-		if targetNames[fish.Name] and fish:FindFirstChildWhichIsA("BasePart", true) then
+		if selectedFishes[fish.Name] and fish:FindFirstChildWhichIsA("BasePart", true) then
 			table.insert(available, fish)
 		end
 	end
@@ -174,33 +318,27 @@ local function stickToFish(fish, duration)
 	if not part then return end
 	
 	-- Calculate stick position (no offset for regular fish, +2 for whale)
-	local offset = Vector3.new(0, 0, 0) -- NO OFFSET for regular fish
+	local offset = Vector3.new(0, 0, 0)
 	
 	if fish.Name == "Whale" then
-		offset = Vector3.new(0, 2, 0) -- +2 studs for Whale
+		offset = Vector3.new(0, 2, 0)
 		statusLabel.Text = "Sticking to Whale (+2 studs)"
 	else
-		statusLabel.Text = "Sticking to " .. fish.Name .. " (no offset)"
+		statusLabel.Text = "Sticking to " .. fish.Name
 	end
 	
 	local startTime = tick()
 	local lastPromptTime = 0
 	
-	-- Stick to fish for the duration
 	while collecting and fish.Parent and tick() - startTime < duration do
-		-- Check if fish still exists and get fresh part reference
 		if not fish or not fish.Parent then break end
 		
 		part = fish:FindFirstChildWhichIsA("BasePart", true)
 		if not part then break end
 		
-		-- Calculate position to stick to (maintain offset)
 		local stickPos = part.Position + offset
-		
-		-- Teleport to maintain stick (every 0.1 seconds for smooth sticking)
 		root.CFrame = CFrame.new(stickPos)
 		
-		-- SPAM proximity prompts every 0.1 seconds while sticking
 		if tick() - lastPromptTime > 0.1 then
 			for _, obj in ipairs(fish:GetDescendants()) do
 				if obj:IsA("ProximityPrompt") then
@@ -211,7 +349,7 @@ local function stickToFish(fish, duration)
 			end
 		end
 		
-		task.wait(0.1) -- Fast stick loop (10 times per second)
+		task.wait(0.1)
 	end
 end
 
@@ -219,81 +357,79 @@ end
 task.spawn(function()
 	while true do
 		if collecting then
-			-- STEP 1: Teleport to DeepOcean part
-			statusLabel.Text = "Phase 1: DeepOcean"
-			teleportToZone("DeepOcean")
-			task.wait(0.2) -- CHANGED FROM 0.1 TO 0.2 SECONDS
-			
-			-- STEP 2: Teleport to TheDeepDark part
-			statusLabel.Text = "Phase 2: TheDeepDark"
-			teleportToZone("TheDeepDark")
-			task.wait(0.2) -- CHANGED FROM 0.1 TO 0.2 SECONDS
-			
-			-- STEP 3: Start 50-second collection cycle
-			local cycleStart = tick()
-			local surfaceReturnTime = cycleStart + collectingTime
-			
-			statusLabel.Text = "Collecting fish (sticking mode)..."
-			
-			while collecting and tick() < surfaceReturnTime do
-				-- Update timer
-				local timeLeft = math.max(0, surfaceReturnTime - tick())
-				timerLabel.Text = math.ceil(timeLeft) .. "s"
-				
-				-- Get all available fish
-				local availableFish = getAvailableFish()
-				
-				if #availableFish > 0 then
-					-- Cycle through all available fish in priority order
-					for _, fishName in ipairs(fishPriority) do
-						if not collecting or tick() >= surfaceReturnTime then break end
-						
-						-- Find this specific fish in available fish
-						for _, fish in ipairs(availableFish) do
-							if fish.Name == fishName then
-								-- Stick to this fish for 2-3 seconds
-								local stickDuration = 2.5 + (math.random() * 0.5) -- 2.5-3 seconds
-								stickToFish(fish, stickDuration)
-								
-								-- Brief pause before next fish (0.1 seconds)
-								if collecting and tick() < surfaceReturnTime then
-									task.wait(0.1)
-								end
-								break
-							end
-						end
-					end
-				else
-					statusLabel.Text = "No fish found"
-					task.wait(0.1) -- Wait 0.1 seconds
-				end
+			-- Check if any fish are selected
+			local selectedCount = 0
+			for _ in pairs(selectedFishes) do
+				selectedCount = selectedCount + 1
 			end
 			
-			-- Surface phase (if still collecting)
-			if collecting then
-				statusLabel.Text = "Returning to surface..."
-				timerLabel.Text = surfaceTime .. "s"
+			if selectedCount == 0 then
+				statusLabel.Text = "No fish selected!"
+				task.wait(1)
+				collecting = false
+				collectBtn.Text = "Collect : OFF"
+				setSpeed(false)
 				teleportToSurface()
+			else
+				-- STEP 1: Teleport to DeepOcean
+				statusLabel.Text = "Phase 1: DeepOcean"
+				teleportToZone("DeepOcean")
+				task.wait(0.2)
 				
-				-- Wait at surface for 2 seconds
-				local surfaceStart = tick()
-				while collecting and tick() - surfaceStart < surfaceTime do
-					local timeLeft = surfaceTime - (tick() - surfaceStart)
+				-- STEP 2: Teleport to TheDeepDark
+				statusLabel.Text = "Phase 2: TheDeepDark"
+				teleportToZone("TheDeepDark")
+				task.wait(0.2)
+				
+				-- STEP 3: Start 50-second collection cycle
+				local cycleStart = tick()
+				local surfaceReturnTime = cycleStart + collectingTime
+				
+				statusLabel.Text = "Collecting selected fish..."
+				
+				while collecting and tick() < surfaceReturnTime do
+					local timeLeft = math.max(0, surfaceReturnTime - tick())
 					timerLabel.Text = math.ceil(timeLeft) .. "s"
-					task.wait(0.1) -- Update timer every 0.1 seconds
+					
+					local availableFish = getAvailableFish()
+					
+					if #availableFish > 0 then
+						for _, fish in ipairs(availableFish) do
+							if not collecting or tick() >= surfaceReturnTime then break end
+							
+							local stickDuration = 2.5 + (math.random() * 0.5)
+							stickToFish(fish, stickDuration)
+							
+							if collecting and tick() < surfaceReturnTime then
+								task.wait(0.1)
+							end
+						end
+					else
+						statusLabel.Text = "No selected fish found"
+						task.wait(0.1)
+					end
+				end
+				
+				-- Surface phase
+				if collecting then
+					statusLabel.Text = "Returning to surface..."
+					timerLabel.Text = surfaceTime .. "s"
+					teleportToSurface()
+					
+					local surfaceStart = tick()
+					while collecting and tick() - surfaceStart < surfaceTime do
+						local timeLeft = surfaceTime - (tick() - surfaceStart)
+						timerLabel.Text = math.ceil(timeLeft) .. "s"
+						task.wait(0.1)
+					end
 				end
 			end
 		else
 			statusLabel.Text = "Idle"
-			timerLabel.Text = "50s" -- CHANGED FROM 30s TO 50s
-			task.wait(0.1) -- Idle wait 0.1 seconds
+			timerLabel.Text = "50s"
+			task.wait(0.1)
 		end
 	end
-end)
-
---// Teleport Back Up button
-tpBtn.MouseButton1Click:Connect(function()
-	teleportToSurface()
 end)
 
 --// Collect button handler
@@ -303,9 +439,10 @@ collectBtn.MouseButton1Click:Connect(function()
 	setSpeed(collecting)
 	
 	if collecting then
-		statusLabel.Text = "Starting zone teleports..."
+		statusLabel.Text = "Starting..."
 	else
-		statusLabel.Text = "Idle"
+		statusLabel.Text = "Teleporting up..."
+		teleportToSurface()
 	end
 end)
 
@@ -320,10 +457,9 @@ end)
 
 --// Debug
 task.wait(1)
-print("=== FISH COLLECTOR WITH STICKING MECHANISM ===")
-print("Target Fish: Shrimp, Slickhead, Anglerfish, Blobfish, Gulper Eel, Hammerhead, Megalodon, Whale")
-print("Offset: NO OFFSET for regular fish, +2 studs for Whale")
-print("Proximity Spam: Every 0.1 seconds")
-print("Stick Duration: 2.5-3 seconds per fish")
-print("Collection Time: 50 seconds")
-print("Zone Teleport Waits: 0.2 seconds each")
+print("=== FISH COLLECTOR WITH DROPDOWN ===")
+print("- Loading fish from: ReplicatedStorage.Assets.FishModels")
+print("- Found " .. #allFishNames .. " unique fish")
+print("- Auto teleport up when turning off")
+print("- Select multiple fish to collect")
+print("- Offset: NO OFFSET for regular fish, +2 for Whale")
